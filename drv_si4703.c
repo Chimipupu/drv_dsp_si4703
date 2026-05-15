@@ -94,24 +94,19 @@ static uint16_t _get_reg(uint8_t reg_addr)
 // -----------------------------------------------------------
 // [API]
 
-void drv_si4703_set_reg(uint8_t reg_addr, uint16_t reg_val)
-{
-    _set_reg(reg_addr, reg_val);
-}
-
-uint16_t drv_si4703_get_reg(uint8_t reg_addr)
-{
-    return _get_reg(reg_addr);
-}
-
 void drv_si4703_init(kt0913_config_t *p_config)
 {
     // TODO
 }
 
-void drv_si4703_volume_ctrl(uint8_t vol_db)
+void drv_si4703_set_vol(uint8_t vol_db)
 {
-    // TODO
+    uint16_t reg_val;
+
+    // SYSCONFIG2レジスタ(Addr:0x05)のBit[3:4] VOLUMEビットを設定
+    reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
+    reg_val = (uint16_t)(vol_db & 0x0F) | reg_val;
+    _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
 }
 
 bool drv_si4703_set_fm_freq(uint8_t station)

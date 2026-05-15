@@ -100,30 +100,30 @@ typedef enum {
 #endif
 } E_FM_STATION;
 
+// Si4703ボリューム制御構造体
+typedef struct {
+    bool is_stereo;    // true: ステレオ, false: モノラル
+    bool is_vol_ext;   // 拡張音量範囲の有効有無
+    uint8_t volume_dB; // 音量dB (デフォ:0dB ~ -28dB、拡張音量:-30dB ~ -58dB)
+} kt0913_volume_ctrl_t;
+
+typedef void (*rst_pin_ctrl_func_t)(uint8_t);        // Si4703のRSTピンのON/OFF関数ポインタ
 typedef void (*i2c_write_func_t)(uint8_t, uint16_t); // I2Cのwrite関数ポインタ
 typedef uint16_t (*i2c_read_func_t)(uint8_t);        // I2Cのread関数ポインタ
 
 // Si4703ドライバ初期化構造体
 typedef struct {
-    // uint8_t radio_area; // 0: 東京, 1: 大阪
-    // bool is_stereo;    // true: ステレオ, false: モノラル
-
-    // [呼び元のI2CのRead/Write関数ポインタ]
+    kt0913_volume_ctrl_t vol_cfg;
+    rst_pin_ctrl_func_t p_rst_pin_ctrl;
     i2c_write_func_t p_i2c_write;
     i2c_read_func_t p_i2c_read;
 } kt0913_config_t;
 
-// Si4703ボリューム制御構造体
-typedef struct {
-    bool is_vol_ext;   // 拡張音量範囲の有効有無
-    uint8_t volume_dB; // 音量dB (デフォ:0dB ~ -28dB、拡張音量:-30dB ~ -58dB)
-} kt0913_volume_ctrl_t;
-
 // -----------------------------------------------------------
-void drv_si4703_set_reg(uint8_t reg_addr, uint16_t reg_val);
-uint16_t drv_si4703_get_reg(uint8_t reg_addr);
+// [API]
+
 void drv_si4703_init(kt0913_config_t *p_config);
-void drv_si4703_volume_ctrl(kt0913_volume_ctrl_t *p_cfg);
+void drv_si4703_set_vol(uint8_t vol_db);
 bool drv_si4703_set_fm_freq(uint8_t station);
 int8_t drv_si4703_get_fm_rssi(void);
 
