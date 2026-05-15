@@ -2,6 +2,7 @@
  * @file drv_si4703.h
  * @author Chimipupu(https://github.com/Chimipupu)
  * @brief DSPラジオIC Si4703 ドライバ
+ * @note Si4703の制御方式: 2線式のI2C (3線式は未対応 @永遠に)
  * @version 0.1
  * @date 2026-05-15
  * @copyright Copyright (c) 2026 Chimipupu All Rights Reserved.
@@ -24,10 +25,15 @@ extern "C" {
 
 // -----------------------------------------------------------
 // [Define]
+
+// Si4703のレジスタアドレス
+#define I2C_ADDR_SI4703           0x10
+
+// CHIPIDレジスタの期待値
 #define SI4703_CHIP_ID             0x1242
 
-// RSSIの最大値
-#define SI4703_MAX_RSSI            0x4B // Si4703の最大RSSI = 75[dBuV]
+// Si4703の最大RSSI = 75[dBuV]
+#define SI4703_MAX_RSSI            0x4B
 
 // FM周波数
 #define SI4703_FM_FREQ_MHZ_MIN     76.0f
@@ -37,6 +43,8 @@ extern "C" {
 // #define RADIO_AREA_TOKYO           0 // 受信地域: 東京
 #define RADIO_AREA_OSAKA           1 // 受信地域: 大阪
 
+#define GPIO_LV_LOW                0
+#define GPIO_LV_HIGH               1
 // -----------------------------------------------------------
 // Si4703レジスタ
 typedef enum {
@@ -107,21 +115,36 @@ typedef struct {
     uint8_t volume_dB; // 音量dB (デフォ:0dB ~ -28dB、拡張音量:-30dB ~ -58dB)
 } kt0913_volume_ctrl_t;
 
-typedef void (*rst_pin_ctrl_func_t)(uint8_t);        // Si4703のRSTピンのON/OFF関数ポインタ
-typedef void (*i2c_write_func_t)(uint8_t, uint16_t); // I2Cのwrite関数ポインタ
-typedef uint16_t (*i2c_read_func_t)(uint8_t);        // I2Cのread関数ポインタ
+// Si4703のRSTピンのON/OFF関数ポインタ
+typedef void (*rst_pin_ctrl_func_t)(uint8_t);
+
+// Si4703のSDAピン(SDIOピン)のON/OFF関数ポインタ
+typedef void (*sda_pin_ctrl_func_t)(uint8_t);
+
+// I2Cの初期化関数ポインタ (呼び出し元のI2C初期化関数)
+// NOTE: 期待値: Arduino IDE環境ならWire.begin()のラッパーの関数ポインタ
+typedef void (*i2c_init_func_t)(void);
+
+// I2Cのwrite関数ポインタ
+typedef void (*i2c_write_func_t)(uint8_t, uint16_t);
+
+// I2Cのread関数ポインタ
+typedef uint16_t (*i2c_read_func_t)(uint8_t);
 
 // Si4703ドライバ初期化構造体
 typedef struct {
     kt0913_volume_ctrl_t vol_cfg;
+
+    // [関数ポインタ]
     rst_pin_ctrl_func_t p_rst_pin_ctrl;
+    sda_pin_ctrl_func_t p_sda_pin_ctrl;
+    i2c_init_func_t p_i2c_init;
     i2c_write_func_t p_i2c_write;
     i2c_read_func_t p_i2c_read;
 } kt0913_config_t;
 
 // -----------------------------------------------------------
 // [API]
-
 void drv_si4703_init(kt0913_config_t *p_config);
 void drv_si4703_set_vol(uint8_t vol_db);
 bool drv_si4703_set_fm_freq(uint8_t station);

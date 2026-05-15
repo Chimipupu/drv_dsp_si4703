@@ -53,7 +53,7 @@ const fm_station_freq_t g_fm_station_freq_tbl[] = {
     // NOTE: U8g2のフォントで大阪の'阪'が非対応なので'坂'で対処
     {76.5f,   5, "FM COCOLO"},
     {80.2f,  42, "FM802"},
-    {85.1f,  91, "FM 大坂"},
+    {85.1f,  91, "FM大坂"},
     {88.1f, 121, "NHK FM OSAKA"},
     {89.4f, 134, "a-STATION"},
     {89.9f, 139, "Kiss FM KOBE"},
@@ -65,13 +65,38 @@ const fm_station_freq_t g_fm_station_freq_tbl[] = {
 };
 const uint8_t FM_STATION_FREQ_TBL_SIZE = sizeof(g_fm_station_freq_tbl) / sizeof(g_fm_station_freq_tbl[0]);
 
+static bool s_is_2_wire_enabled = false;
 static kt0913_config_t s_drv_cfg;
 static kt0913_volume_ctrl_t s_vol_ctrl;
 
+static void _set_two_wire_ctrl_enable(void);
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val);
 static uint16_t _get_reg(uint8_t reg_addr);
 // -----------------------------------------------------------
 // [Static]
+
+/**
+ * @brief 2線式制御の有効化
+ * @note Si4703のリセット時にSDAとRSTピンをGPIOでいじって2線式を有効化
+ */
+static void _si4703_i2c_ctrl_enable(void)
+{
+    // 1) SDAピンと接続してるマイコンのGPIOをLow
+    s_drv_cfg.p_sda_pin_ctrl(GPIO_LV_LOW);
+
+    // 2) RSTピンと接続してるマイコンのGPIOをLow
+    s_drv_cfg.p_rst_pin_ctrl(GPIO_LV_LOW);
+
+    // 3) RSTピンと接続してるマイコンのGPIOをHigh
+    s_drv_cfg.p_rst_pin_ctrl(GPIO_LV_HIGH);
+
+    // 4) I2C初期化 (呼び出し元のI2C初期化関数)
+    // NOTE: 期待値: Arduino IDE環境ならWire.begin()のラッパーの関数ポインタ
+    s_drv_cfg.p_i2c_init();
+
+    // 5) 2線式制御の有効化したことを記録しておく
+    s_is_2_wire_enabled = true;
+}
 
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val)
 {
@@ -94,9 +119,52 @@ static uint16_t _get_reg(uint8_t reg_addr)
 // -----------------------------------------------------------
 // [API]
 
-void drv_si4703_init(kt0913_config_t *p_config)
+bool drv_si4703_init(kt0913_config_t *p_config)
 {
-    // TODO
+    uint16_t reg_val;
+
+    // 引数のNULLチェック
+    if( p_config == NULL ) {
+        return false;
+    }
+
+    // Si4703の制御方式を2線式のI2Cに変更
+    _si4703_i2c_ctrl_enable();
+
+    // POWERCFGレジスタ(Addr:0x02)
+    {
+        reg_val = _get_reg(SI4703_REG_POWERCFG);
+
+        // [ミュート解除]: Bit14 DMUTEビットをセット
+        // [ソフトミュート解除]: Bit13 SMUTEビットをセット]
+        // [Seek Up Enable]: Bit12 SEEKUPビットをセット(0: Seek Down, 1: Seek Up)
+        // [Power Up Enable]: Bit0 ENABLEビットをセット
+        reg_val |= (0x4000 | 0x2000 | 0x1000 | 0x0001);
+
+        _set_reg(SI4703_REG_POWERCFG, reg_val);
+    }
+
+    // SYSCONFIG2レジスタ(Addr:0x05)
+    {
+        reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
+
+        // [周波数帯域 76~108MHz]: Bit[7:6] BANDビットをセット
+        // [Spacing 100kHz]: Bit[5:4] SPACEビットをセット
+        // [音量を中間にしておく]: Bit[3:0] VOLUMEビット
+        reg_val |= (0x0080 | 0x0020 | 0x0007);
+
+        _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
+    }
+
+    // FM周波数の初期値を設定
+    // NOTE: 受信地域: 東京 = FM東京(80.0MHz)、大阪 = FM大阪(85.1MHz)
+#ifdef RADIO_AREA_TOKYO
+    drv_si4703_set_fm_freq(FM_STATION_FM_TOKYO);
+#else
+    drv_si4703_set_fm_freq(FM_STATION_FM_OSAKA);
+#endif
+
+    return true;
 }
 
 void drv_si4703_set_vol(uint8_t vol_db)
