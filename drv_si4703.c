@@ -1,0 +1,152 @@
+/**
+ * @file drv_si4703.c
+ * @author Chimipupu(https://github.com/Chimipupu)
+ * @brief DSPラジオIC Si4703 ドライバ
+ * @version 0.1
+ * @date 2026-05-15
+ * @copyright Copyright (c) 2026 Chimipupu All Rights Reserved.
+ */
+
+#include "drv_si4703.h"
+
+// -----------------------------------------------------------
+// [レジスタテーブル]
+const uint8_t g_si4703_reg_addr_tbl[] = {
+    SI4703_REG_DEVICEID,
+    SI4703_REG_CHIPID,
+    SI4703_REG_POWERCFG,
+    SI4703_REG_CHANNEL,
+    SI4703_REG_SYSCONFIG1,
+    SI4703_REG_SYSCONFIG2,
+    SI4703_REG_SYSCONFIG3,
+    SI4703_REG_TEST1,
+    SI4703_REG_TEST2,
+    SI4703_REG_BOOTCONFIG,
+    SI4703_REG_STATUSRSSI,
+    SI4703_REG_READCHAN,
+
+    // [RDS/RBDSは未サポート]
+    // NOTE: 日本国内ではRDS/RBDSの受信はできないため
+#if 0
+    SI4703_REG_RDSA,
+    SI4703_REG_RDSB,
+    SI4703_REG_RDSC,
+    SI4703_REG_RDSD
+#endif
+};
+const uint8_t SI4703_REG_TBL_SIZE = sizeof(g_si4703_reg_addr_tbl) / sizeof(g_si4703_reg_addr_tbl[0]);
+
+// [FMラジオ局テーブル]
+// NOTE: レジスタ値はSpacing=100kHz(0.1MHz)で計算したchの値 (計算式: Freq[MHz] = (0.1 * ch) + 76MHz)
+const fm_station_freq_t g_fm_station_freq_tbl[] = {
+#ifdef RADIO_AREA_TOKYO
+    // [東京エリア]
+    {80.0f,  40, "FM東京"},
+    {81.3f,  53, "J-WAVE"},
+    {82.5f,  65, "NHK FM東京"},
+    {89.7f, 137, "InterFM897"},
+    {90.5f, 145, "TBSラジオ"},
+    {91.6f, 156, "文化放送"},
+    {93.0f, 170, "ニッポン放送"},
+#else
+    // [大阪エリア]
+    // NOTE: U8g2のフォントで大阪の'阪'が非対応なので'坂'で対処
+    {76.5f,   5, "FM COCOLO"},
+    {80.2f,  42, "FM802"},
+    {85.1f,  91, "FM 大坂"},
+    {88.1f, 121, "NHK FM OSAKA"},
+    {89.4f, 134, "a-STATION"},
+    {89.9f, 139, "Kiss FM KOBE"},
+    {90.6f, 146, "MBSラジオ"},
+    {91.1f, 151, "ラジオ関西"},
+    {91.9f, 159, "ラジオ大坂OBC"},
+    {93.3f, 173, "ABCラジオ"},
+#endif
+};
+const uint8_t FM_STATION_FREQ_TBL_SIZE = sizeof(g_fm_station_freq_tbl) / sizeof(g_fm_station_freq_tbl[0]);
+
+static kt0913_config_t s_drv_cfg;
+static kt0913_volume_ctrl_t s_vol_ctrl;
+
+static void _set_reg(uint8_t reg_addr, uint16_t reg_val);
+static uint16_t _get_reg(uint8_t reg_addr);
+// -----------------------------------------------------------
+// [Static]
+
+static void _set_reg(uint8_t reg_addr, uint16_t reg_val)
+{
+    if(reg_addr < SI4703_REG_TBL_SIZE) {
+        s_drv_cfg.p_i2c_write(reg_addr, reg_val);
+    }
+}
+
+static uint16_t _get_reg(uint8_t reg_addr)
+{
+    uint16_t reg_val = 0xFFFF;
+
+    if(reg_addr < SI4703_REG_TBL_SIZE) {
+        reg_val = s_drv_cfg.p_i2c_read(reg_addr);
+    }
+
+    return reg_val;
+}
+
+// -----------------------------------------------------------
+// [API]
+
+void drv_si4703_set_reg(uint8_t reg_addr, uint16_t reg_val)
+{
+    _set_reg(reg_addr, reg_val);
+}
+
+uint16_t drv_si4703_get_reg(uint8_t reg_addr)
+{
+    return _get_reg(reg_addr);
+}
+
+void drv_si4703_init(kt0913_config_t *p_config)
+{
+    // TODO
+}
+
+void drv_si4703_volume_ctrl(uint8_t vol_db)
+{
+    // TODO
+}
+
+bool drv_si4703_set_fm_freq(uint8_t station)
+{
+    uint16_t reg_val;
+
+    // 引数チェック
+    if(station > FM_STATION_FREQ_TBL_SIZE) {
+        return false;
+    }
+
+    // 引数のラジオ局のFM周波数をテーブルから引いてくる
+    reg_val = g_fm_station_freq_tbl[station].set_reg_val;
+
+    // [TUNEレジスタ(Addr:0x03)にFM周波数を設定]
+    // TUNEビット(bit15)は0にして周波数を設定
+    _set_reg(SI4703_REG_CHANNEL, reg_val & ~0x8000);
+    // CHANビットを1、Bit[9:0]でCh選択して指定のFM周波数にTUNE開始
+    _set_reg(SI4703_REG_CHANNEL, reg_val | 0x8000);
+
+    return true;
+}
+
+int8_t drv_si4703_get_fm_rssi(void)
+{
+    int8_t rssi_dB;
+    uint8_t rssi_reg_val;
+    uint16_t reg_val;
+
+    // STATUSRSSIレジスタ(Addr:0x0A)のBit[7:0]のRSSIビット
+    reg_val = _get_reg(SI4703_REG_STATUSRSSI);
+    rssi_reg_val = (uint8_t)(reg_val& 0x0F);
+
+    // レジスタ値 -> RSSI変換
+    rssi_dB = rssi_reg_val & SI4703_MAX_RSSI;
+
+    return rssi_dB;
+}
