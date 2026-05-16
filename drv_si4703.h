@@ -145,7 +145,7 @@ typedef struct {
 
 // -----------------------------------------------------------
 // [API]
-void drv_si4703_init(kt0913_config_t *p_config);
+bool drv_si4703_init(kt0913_config_t *p_config);
 void drv_si4703_set_vol(uint8_t vol_db);
 bool drv_si4703_set_fm_freq(uint8_t station);
 int8_t drv_si4703_get_fm_rssi(void);

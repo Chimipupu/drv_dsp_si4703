@@ -36,8 +36,12 @@ const uint8_t g_si4703_reg_addr_tbl[] = {
 };
 const uint8_t SI4703_REG_TBL_SIZE = sizeof(g_si4703_reg_addr_tbl) / sizeof(g_si4703_reg_addr_tbl[0]);
 
+// [CHのレジスタ値計算マクロ]
+// NOTE: chの値はSpacing=100kHz(0.1MHz)で計算
+// 計算式:ch = (Freq[MHz] - 76MHz) / 0.1MHz
+// #define CALC_CH_REG_VAL(freq_mhz)  ((uint16_t)(((freq_mhz) - SI4703_FM_FREQ_MHZ_MIN) / 0.1f))
+
 // [FMラジオ局テーブル]
-// NOTE: レジスタ値はSpacing=100kHz(0.1MHz)で計算したchの値 (計算式: Freq[MHz] = (0.1 * ch) + 76MHz)
 const fm_station_freq_t g_fm_station_freq_tbl[] = {
 #ifdef RADIO_AREA_TOKYO
     // [東京エリア]
@@ -69,7 +73,7 @@ static bool s_is_2_wire_enabled = false;
 static kt0913_config_t s_drv_cfg;
 static kt0913_volume_ctrl_t s_vol_ctrl;
 
-static void _set_two_wire_ctrl_enable(void);
+static void _si4703_i2c_ctrl_enable(void);
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val);
 static uint16_t _get_reg(uint8_t reg_addr);
 // -----------------------------------------------------------
@@ -127,6 +131,8 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     if( p_config == NULL ) {
         return false;
     }
+
+    s_drv_cfg = *p_config;
 
     // Si4703の制御方式を2線式のI2Cに変更
     _si4703_i2c_ctrl_enable();
