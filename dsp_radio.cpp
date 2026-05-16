@@ -20,7 +20,7 @@
 // 基板のGPIO
 #define I2C_SDA_PIN        4
 #define I2C_SCL_PIN        5
-#define DSP_RST_PIN        16
+#define DSP_RST_PIN        22
 #define PCB_BTN_PIN        24
 
 // OLEDディスプレイのI2Cアドレス
@@ -50,14 +50,17 @@ static void _dbg_get_all_reg(void);
 // -----------------------------------------------------------
 // [Static]
 
+static void _btn_isr(void)
+{
+    dsp_radio_fm_ch_chg();
+}
+
 static void _gpio_init(void)
 {
     // 基板のYD-RP2040のボタン(GPIO24)を割り込みに設定
     // NOTE: ボタンがONでFMのCH切り替えをコールバック
     pinMode(PCB_BTN_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(24), []() {
-        dsp_radio_fm_ch_chg();
-    }, FALLING);
+    attachInterrupt(digitalPinToInterrupt(PCB_BTN_PIN), _btn_isr, FALLING);
 }
 
 static void _rst_pin_ctrl(uint8_t onoff)
@@ -88,8 +91,6 @@ static void _i2c_init(void)
 {
     Wire.setSDA(I2C_SDA_PIN);
     Wire.setSCL(I2C_SCL_PIN);
-    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
-    pinMode(I2C_SCL_PIN, INPUT_PULLUP);
     Wire.begin();
 }
 
@@ -123,9 +124,12 @@ static void _i2c_write(uint8_t reg_addr, uint16_t reg_val)
 static void _i2c_read_burst(uint16_t *p_reg, uint32_t read_byte_length)
 {
     uint8_t i;
+    uint32_t word_length;
+
+    word_length = read_byte_length / 2;
 
     if(Wire.requestFrom(I2C_ADDR_SI4703, read_byte_length) == read_byte_length) {
-        for(i = 0; i < read_byte_length; i++)
+        for(i = 0; i < word_length; i++)
         {
             p_reg[i] = (Wire.read() << 8); // 上位バイト
             p_reg[i] |= Wire.read();       // 下位バイト
@@ -136,9 +140,12 @@ static void _i2c_read_burst(uint16_t *p_reg, uint32_t read_byte_length)
 static void _i2c_write_burst(uint16_t *p_buf, uint32_t write_byte_length)
 {
     uint32_t i;
+    uint32_t word_length;
+
+    word_length = write_byte_length / 2;
 
     Wire.beginTransmission(I2C_ADDR_SI4703);
-    for(i = 0; i < write_byte_length; i++)
+    for(i = 0; i < word_length; i++)
     {
         Wire.write((p_buf[i] >> 8) & 0xFF); // 上位バイト
         Wire.write(p_buf[i] & 0xFF);        // 下位バイト

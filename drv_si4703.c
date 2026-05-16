@@ -87,6 +87,7 @@ static void _si4703_i2c_ctrl_enable(void)
 
     // 2) RSTピンをHigh
     s_drv_cfg.p_rst_pin_ctrl(GPIO_LV_HIGH);
+    s_drv_cfg.p_delay_ms(2);
 
     // 3) I2C初期化
     s_drv_cfg.p_i2c_init();
@@ -97,6 +98,8 @@ static void _si4703_i2c_ctrl_enable(void)
 static void _read_all_reg(void)
 {
     uint16_t read_buf[16];
+
+    memset(read_buf, 0, sizeof(read_buf));
     s_drv_cfg.p_i2c_burst_read(&read_buf[0], 16 * 2);
 
     // バッファのデータはレジスタAddr:0x0A〜0x0F、0x00〜0x09の順なので対応
@@ -124,7 +127,7 @@ static void _set_reg(uint8_t reg_addr, uint16_t reg_val)
     uint8_t i;
 
     // 読み出し専用レジスタ: Addr 0x00、0x01、0x0A ~ 0x0F
-    if((reg_addr > 0x02) || (reg_addr >= 0x0A)) {
+    if((reg_addr < 0x02) || (reg_addr >= 0x0A)) {
         return;
     }
 
@@ -171,15 +174,15 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     // Si4703の制御方式を2線式のI2Cに変更
     _si4703_i2c_ctrl_enable();
 
-#if 1
+#if 0
     // TEST1レジスタ(Addr:0x07)
     {
         reg_val = _get_reg(SI4703_REG_TEST1);
         reg_val |= 0x8000; // Bit15のXOSCENビットを立てる(水晶発振子の有効化)
-        _set_reg(SI4703_REG_SYSCONFIG1, reg_val);
+        _set_reg(SI4703_REG_TEST1, reg_val);
 
-        // NOTE: 水晶振動子の発振の安定待ち
-        s_drv_cfg.p_delay_ms(100);
+        // NOTE: 水晶振動子の発振安定待ち
+        s_drv_cfg.p_delay_ms(500);
     }
 #endif
 
