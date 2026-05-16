@@ -10,6 +10,8 @@
 #include "drv_si4703.h"
 
 // -----------------------------------------------------------
+#define DRV_TIMEOUT_MS           100
+
 // [レジスタテーブル]
 si4703_reg_data_t g_si4703_reg_data_tbl[] = {
     {SI4703_REG_DEVICEID,   0x0000},
@@ -85,9 +87,11 @@ static void _si4703_i2c_ctrl_enable(void)
     s_drv_cfg.p_rst_pin_ctrl(GPIO_LV_LOW);
     s_drv_cfg.p_delay_ms(2);
 
-    // 2) RSTピンをHigh
+    // 2) RSTピン、SDAピンの順でHighに戻す
     s_drv_cfg.p_rst_pin_ctrl(GPIO_LV_HIGH);
     s_drv_cfg.p_delay_ms(2);
+    s_drv_cfg.p_sda_pin_ctrl(GPIO_LV_HIGH);
+    s_drv_cfg.p_delay_ms(10);
 
     // 3) I2C初期化
     s_drv_cfg.p_i2c_init();
@@ -150,7 +154,7 @@ static uint16_t _get_reg(uint8_t reg_addr)
 
     _read_all_reg();
 
-    if(reg_addr > 0x0F) {
+    if(reg_addr <= 0x0F) {
         reg_val = g_si4703_reg_data_tbl[reg_addr].reg_val;
     }
 
@@ -174,7 +178,7 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     // Si4703の制御方式を2線式のI2Cに変更
     _si4703_i2c_ctrl_enable();
 
-#if 0
+#if 1
     // TEST1レジスタ(Addr:0x07)
     {
         reg_val = _get_reg(SI4703_REG_TEST1);
@@ -185,6 +189,18 @@ bool drv_si4703_init(kt0913_config_t *p_config)
         s_drv_cfg.p_delay_ms(500);
     }
 #endif
+
+    // SYSCONFIG2レジスタ(Addr:0x05)
+    {
+        reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
+
+        // [周波数帯域 76~108MHz]: Bit[7:6] BANDビット = 0x01セット
+        // [Spacing 100kHz]: Bit[5:4] SPACEビット = 0x01セット
+        // [音量]: Bit[3:0] VOLUMEビット
+        reg_val |= (0x0040 | 0x0010 | 0x000A);
+
+        _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
+    }
 
     // POWERCFGレジスタ(Addr:0x02)
     {
@@ -199,17 +215,8 @@ bool drv_si4703_init(kt0913_config_t *p_config)
         _set_reg(SI4703_REG_POWERCFG, reg_val);
     }
 
-    // SYSCONFIG2レジスタ(Addr:0x05)
-    {
-        reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
-
-        // [周波数帯域 76~108MHz]: Bit[7:6] BANDビットをセット
-        // [Spacing 100kHz]: Bit[5:4] SPACEビットをセット
-        // [音量を中間にしておく]: Bit[3:0] VOLUMEビット
-        reg_val |= (0x0080 | 0x0020 | 0x0007);
-
-        _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
-    }
+    // ★超重要: Power Up完了待ち
+    s_drv_cfg.p_delay_ms(130);
 
     // FM周波数の初期値を設定
     // NOTE: 受信地域: 東京 = FM東京(80.0MHz)、大阪 = FM大阪(85.1MHz)
@@ -236,20 +243,51 @@ void drv_si4703_set_vol(uint8_t vol_db)
 bool drv_si4703_set_fm_freq(uint8_t station)
 {
     uint16_t reg_val;
+    uint16_t status_reg;
+    uint32_t timeout;
 
     // 引数チェック
-    if(station > FM_STATION_FREQ_TBL_SIZE) {
+    if(station >= FM_STATION_FREQ_TBL_SIZE) {
         return false;
     }
 
     // 引数のラジオ局のFM周波数をテーブルから引いてくる
     reg_val = g_fm_station_freq_tbl[station].set_reg_val;
 
-    // [TUNEレジスタ(Addr:0x03)にFM周波数を設定]
-    // TUNEビット(bit15)は0にして周波数を設定
+    // 1) TUNEビットを0にしてFM周波数を設定
     _set_reg(SI4703_REG_CHANNEL, reg_val & ~0x8000);
-    // CHANビットを1、Bit[9:0]でCh選択して指定のFM周波数にTUNE開始
+
+    // 2) TUNEビットを1にして指定のFM周波数にTUNE開始
     _set_reg(SI4703_REG_CHANNEL, reg_val | 0x8000);
+
+    // 3) TUNE完了待ち
+    // NOTE: Status RSSIレジスタ(Addr:0x0AのBit14 STCビットが1になるまで
+    timeout = DRV_TIMEOUT_MS;
+    while(timeout > 0)
+    {
+        status_reg = _get_reg(SI4703_REG_STATUSRSSI);
+        if((status_reg & 0x4000) != 0) {
+            break; // STCが1になったら完了
+        }
+        s_drv_cfg.p_delay_ms(1);
+        timeout--;
+    }
+
+    // 4) TUNEビットを0に戻す
+    //  TUNEビットが立ってるときはミュートされるから
+    _set_reg(SI4703_REG_CHANNEL, reg_val & ~0x8000);
+
+    // 5) STCビットが0に戻るのを待つ
+    timeout = DRV_TIMEOUT_MS;
+    while(timeout > 0)
+    {
+        status_reg = _get_reg(SI4703_REG_STATUSRSSI);
+        if((status_reg & 0x4000) == 0) {
+            break; // STCが0に戻ったら次の操作が可能
+        }
+        s_drv_cfg.p_delay_ms(1);
+        timeout--;
+    }
 
     return true;
 }
