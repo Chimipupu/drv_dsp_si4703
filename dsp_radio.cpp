@@ -36,8 +36,12 @@ static int8_t s_fm_rssi = 0; // RSSI値
 
 static void _gpio_init(void);
 static void _i2c_init(void);
+#if 0
 static void _i2c_write(uint8_t reg_addr, uint16_t reg_val);
 static uint16_t _i2c_read(uint8_t reg_addr);
+#endif
+static void _i2c_read_burst(uint16_t *p_reg, uint32_t read_byte_length);
+static void _i2c_write_burst(uint16_t *p_buf, uint32_t write_byte_length);
 static void _ui_draw_fm_freq(float freq_val, char *p_str);
 
 #ifdef DEBUG_DSP_RADIO
@@ -62,7 +66,7 @@ static void _rst_pin_ctrl(uint8_t onoff)
 
     if(s_is_rst_pin_init != true) {
         pinMode(DSP_RST_PIN, INPUT_PULLUP);
-        digitalWrite(DSP_RST_PIN, HIGH);
+        s_is_rst_pin_init = true;
     }
 
     digitalWrite(DSP_RST_PIN, (onoff & 0x01) ? HIGH : LOW);
@@ -74,7 +78,7 @@ static void _sda_pin_ctrl(uint8_t onoff)
 
     if(s_is_sda_pin_init != true) {
         pinMode(I2C_SDA_PIN, INPUT_PULLUP);
-        digitalWrite(DSP_RST_PIN, HIGH);
+        s_is_sda_pin_init = true;
     }
 
     digitalWrite(I2C_SDA_PIN, (onoff & 0x01) ? HIGH : LOW);
@@ -89,15 +93,7 @@ static void _i2c_init(void)
     Wire.begin();
 }
 
-static void _i2c_write(uint8_t reg_addr, uint16_t reg_val)
-{
-    Wire.beginTransmission(I2C_ADDR_SI4703);
-    Wire.write(reg_addr);
-    Wire.write((reg_val >> 8) & 0xFF); // 上位バイト
-    Wire.write(reg_val & 0xFF);        // 下位バイト
-    Wire.endTransmission();
-}
-
+#if 0
 static uint16_t _i2c_read(uint8_t reg_addr)
 {
     uint16_t reg_val = 0xFFFF;
@@ -112,6 +108,42 @@ static uint16_t _i2c_read(uint8_t reg_addr)
     }
 
     return reg_val;
+}
+
+static void _i2c_write(uint8_t reg_addr, uint16_t reg_val)
+{
+    Wire.beginTransmission(I2C_ADDR_SI4703);
+    Wire.write(reg_addr);
+    Wire.write((reg_val >> 8) & 0xFF); // 上位バイト
+    Wire.write(reg_val & 0xFF);        // 下位バイト
+    Wire.endTransmission();
+}
+#endif
+
+static void _i2c_read_burst(uint16_t *p_reg, uint32_t read_byte_length)
+{
+    uint8_t i;
+
+    if(Wire.requestFrom(I2C_ADDR_SI4703, read_byte_length) == read_byte_length) {
+        for(i = 0; i < read_byte_length; i++)
+        {
+            p_reg[i] = (Wire.read() << 8); // 上位バイト
+            p_reg[i] |= Wire.read();       // 下位バイト
+        }
+    }
+}
+
+static void _i2c_write_burst(uint16_t *p_buf, uint32_t write_byte_length)
+{
+    uint32_t i;
+
+    Wire.beginTransmission(I2C_ADDR_SI4703);
+    for(i = 0; i < write_byte_length; i++)
+    {
+        Wire.write((p_buf[i] >> 8) & 0xFF); // 上位バイト
+        Wire.write(p_buf[i] & 0xFF);        // 下位バイト
+    }
+    Wire.endTransmission();
 }
 
 static void _lcd_init(void)
@@ -187,8 +219,8 @@ void dsp_radio_vol_ctrl(bool is_vol_up)
 void dsp_radio_init(void)
 {
     // Si4703ドライバにI2CのRead/Write関数を渡して初期化
-    g_si4703_cfg.p_i2c_write = _i2c_write;
-    g_si4703_cfg.p_i2c_read  = _i2c_read;
+    g_si4703_cfg.p_i2c_burst_read = _i2c_read_burst;
+    g_si4703_cfg.p_i2c_burst_write = _i2c_write_burst;
     g_si4703_cfg.p_rst_pin_ctrl = _rst_pin_ctrl;
     g_si4703_cfg.p_sda_pin_ctrl = _sda_pin_ctrl;
     g_si4703_cfg.p_i2c_init = _i2c_init;
@@ -221,27 +253,20 @@ void dsp_radio_main(void)
             // 'n'を受信: FMラジオのCHを切り替え
             if (c == 'n') {
                 dsp_radio_fm_ch_chg();
-#ifdef DEBUG_DSP_RADIO
-                // [DEBUG] DSPの全レジスタを読み出し
-                _dbg_get_all_reg();
-#endif // DEBUG_DSP_RADIO
             }
             // 'u'を受信: 音量アップ
             else if (c == 'u') {
                 dsp_radio_vol_ctrl(true);
-#ifdef DEBUG_DSP_RADIO
-                // [DEBUG] DSPの全レジスタを読み出し
-                _dbg_get_all_reg();
-#endif // DEBUG_DSP_RADIO
             }
             // 'd'を受信: 音量ダウン
             else if (c == 'd') {
                 dsp_radio_vol_ctrl(false);
-#ifdef DEBUG_DSP_RADIO
-                // [DEBUG] DSPの全レジスタを読み出し
-                _dbg_get_all_reg();
-#endif // DEBUG_DSP_RADIO
             }
+
+#ifdef DEBUG_DSP_RADIO
+        // [DEBUG] DSPの全レジスタを読み出し
+        _dbg_get_all_reg();
+#endif // DEBUG_DSP_RADIO
         }
     }
 }
@@ -253,13 +278,13 @@ void dsp_radio_main(void)
 static void _dbg_get_all_reg(void)
 {
     uint8_t i;
-    uint16_t reg_val;
 
+    drv_si4703_all_reg_dump();
     Serial.println("[DEBUG] DSP(SI4703) All Register Read Dump:");
-    for(i = 0; i < SI4703_REG_TBL_SIZE; i++)
+
+    for(i = 0; i < 16; i++)
     {
-        reg_val = drv_si4703_get_reg(g_si4703_reg_addr_tbl[i]);
-        Serial.printf("[DEBUG] Reg[0x%02X]: 0x%04X\r\n", g_si4703_reg_addr_tbl[i], reg_val);
+        Serial.printf("[DEBUG] Reg[0x%02X]: 0x%04X\r\n", i, g_si4703_reg_data_tbl[i].reg_val);
     }
 }
 #endif // DEBUG_DSP_RADIO

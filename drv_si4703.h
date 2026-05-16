@@ -63,16 +63,13 @@ typedef enum {
 
     // [RDS/RBDSは未サポート]
     // NOTE: 日本国内ではRDS/RBDSの受信はできないため
-#if 0
+#if 1
     SI4703_REG_RDSA,
     SI4703_REG_RDSB,
     SI4703_REG_RDSC,
     SI4703_REG_RDSD
 #endif
 } SI4703_REG;
-
-extern const uint8_t g_si4703_reg_addr_tbl[];
-extern const uint8_t SI4703_REG_TBL_SIZE;
 
 // FMラジオ局構造体
 typedef struct {
@@ -115,21 +112,32 @@ typedef struct {
     uint8_t volume_dB; // 音量dB (デフォ:0dB ~ -28dB、拡張音量:-30dB ~ -58dB)
 } kt0913_volume_ctrl_t;
 
+// レジスタデータ
+typedef struct {
+    uint8_t reg_addr;
+    uint16_t reg_val;
+} si4703_reg_data_t;
+extern si4703_reg_data_t g_si4703_reg_data_tbl[];
+
 // Si4703のRSTピンのON/OFF関数ポインタ
 typedef void (*rst_pin_ctrl_func_t)(uint8_t);
 
 // Si4703のSDAピン(SDIOピン)のON/OFF関数ポインタ
 typedef void (*sda_pin_ctrl_func_t)(uint8_t);
 
-// I2Cの初期化関数ポインタ (呼び出し元のI2C初期化関数)
+// I2Cの初期化関数ポインタ
 // NOTE: 期待値: Arduino IDE環境ならWire.begin()のラッパーの関数ポインタ
 typedef void (*i2c_init_func_t)(void);
 
-// I2Cのwrite関数ポインタ
-typedef void (*i2c_write_func_t)(uint8_t, uint16_t);
+// I2CのバーストWrite関数ポインタ
+typedef void (*i2c_burst_write_func_t)(uint16_t *, uint32_t);
 
-// I2Cのread関数ポインタ
-typedef uint16_t (*i2c_read_func_t)(uint8_t);
+// I2CのバーストRead関数ポインタ
+typedef void (*i2c_burst_read_func_t)(uint16_t *, uint32_t);
+
+// Delay関数ポインタ
+// NOTE: 期待値: Arduino IDE環境ならdelay(ms)の関数ポインタ
+typedef void (*delay_ms_func_t)(uint32_t);
 
 // Si4703ドライバ初期化構造体
 typedef struct {
@@ -139,8 +147,9 @@ typedef struct {
     rst_pin_ctrl_func_t p_rst_pin_ctrl;
     sda_pin_ctrl_func_t p_sda_pin_ctrl;
     i2c_init_func_t p_i2c_init;
-    i2c_write_func_t p_i2c_write;
-    i2c_read_func_t p_i2c_read;
+    i2c_burst_write_func_t p_i2c_burst_write;
+    i2c_burst_read_func_t p_i2c_burst_read;
+    delay_ms_func_t p_delay_ms;
 } kt0913_config_t;
 
 // -----------------------------------------------------------
@@ -149,6 +158,7 @@ bool drv_si4703_init(kt0913_config_t *p_config);
 void drv_si4703_set_vol(uint8_t vol_db);
 bool drv_si4703_set_fm_freq(uint8_t station);
 int8_t drv_si4703_get_fm_rssi(void);
+void drv_si4703_all_reg_dump(void);
 
 #ifdef __cplusplus
 }
