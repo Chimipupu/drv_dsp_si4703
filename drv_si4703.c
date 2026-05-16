@@ -171,6 +171,18 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     // Si4703の制御方式を2線式のI2Cに変更
     _si4703_i2c_ctrl_enable();
 
+#if 1
+    // TEST1レジスタ(Addr:0x07)
+    {
+        reg_val = _get_reg(SI4703_REG_TEST1);
+        reg_val |= 0x8000; // Bit15のXOSCENビットを立てる(水晶発振子の有効化)
+        _set_reg(SI4703_REG_SYSCONFIG1, reg_val);
+
+        // NOTE: 水晶振動子の発振の安定待ち
+        s_drv_cfg.p_delay_ms(100);
+    }
+#endif
+
     // POWERCFGレジスタ(Addr:0x02)
     {
         reg_val = _get_reg(SI4703_REG_POWERCFG);

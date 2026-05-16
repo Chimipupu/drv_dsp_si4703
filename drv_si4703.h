@@ -28,6 +28,7 @@ extern "C" {
 
 // Si4703のレジスタアドレス
 #define I2C_ADDR_SI4703           0x10
+// #define I2C_ADDR_SI4703           (0x10 << 1)
 
 // CHIPIDレジスタの期待値
 #define SI4703_CHIP_ID             0x1242
@@ -137,7 +138,7 @@ typedef void (*i2c_burst_read_func_t)(uint16_t *, uint32_t);
 
 // Delay関数ポインタ
 // NOTE: 期待値: Arduino IDE環境ならdelay(ms)の関数ポインタ
-typedef void (*delay_ms_func_t)(uint32_t);
+typedef void (*delay_ms_func_t)(unsigned long);
 
 // Si4703ドライバ初期化構造体
 typedef struct {

@@ -65,7 +65,7 @@ static void _rst_pin_ctrl(uint8_t onoff)
     static bool s_is_rst_pin_init = false;
 
     if(s_is_rst_pin_init != true) {
-        pinMode(DSP_RST_PIN, INPUT_PULLUP);
+        pinMode(DSP_RST_PIN, OUTPUT);
         s_is_rst_pin_init = true;
     }
 
@@ -77,7 +77,7 @@ static void _sda_pin_ctrl(uint8_t onoff)
     static bool s_is_sda_pin_init = false;
 
     if(s_is_sda_pin_init != true) {
-        pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+        pinMode(I2C_SDA_PIN, OUTPUT);
         s_is_sda_pin_init = true;
     }
 
@@ -224,6 +224,7 @@ void dsp_radio_init(void)
     g_si4703_cfg.p_rst_pin_ctrl = _rst_pin_ctrl;
     g_si4703_cfg.p_sda_pin_ctrl = _sda_pin_ctrl;
     g_si4703_cfg.p_i2c_init = _i2c_init;
+    g_si4703_cfg.p_delay_ms = delay;
     drv_si4703_init(&g_si4703_cfg);
 
     // GPIO初期化
@@ -244,9 +245,11 @@ void dsp_radio_init(void)
 
 void dsp_radio_main(void)
 {
+    char c;
+
     // シリアルの受信でDSPラジオを制御
     if (Serial.available() > 0) {
-        char c = Serial.read();
+        c = Serial.read();
 
         // アルファベットのみ処理
         if((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
