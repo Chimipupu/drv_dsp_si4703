@@ -190,7 +190,17 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     }
 #endif
 
-    // SYSCONFIG2レジスタ(Addr:0x05)
+    // System Configuration 1 レジスタ(Addr:0x04)
+    {
+        reg_val = _get_reg(SI4703_REG_SYSCONFIG1);
+
+        // [信号強調(De-emphasis)]: Bit11 DEビット = 1 (Japan: 50us)
+        reg_val |= (0x0800);
+
+        _set_reg(SI4703_REG_SYSCONFIG1, reg_val);
+    }
+
+    // System Configuration 2 レジスタ(Addr:0x05)
     {
         reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
 
@@ -226,6 +236,9 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     drv_si4703_set_fm_freq(FM_STATION_FM_OSAKA);
 #endif
 
+    // 初期化時の音量を小さくしておく
+    drv_si4703_set_vol(0x08);
+
     return true;
 }
 
@@ -238,6 +251,17 @@ void drv_si4703_set_vol(uint8_t vol_db)
     reg_val &= 0xFFF0; // Bit[3:0] VOLUMEビットをクリア
     reg_val |= (uint16_t)(vol_db & 0x0F);
     _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
+}
+
+uint8_t drv_si4703_get_vol(void)
+{
+    uint8_t read_vol = 0;
+    uint16_t reg_val;
+
+    reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
+    read_vol = (uint8_t)(reg_val & 0x000F);
+
+    return read_vol;
 }
 
 bool drv_si4703_set_fm_freq(uint8_t station)
@@ -300,10 +324,13 @@ int8_t drv_si4703_get_fm_rssi(void)
 
     // STATUSRSSIレジスタ(Addr:0x0A)のBit[7:0]のRSSIビット
     reg_val = _get_reg(SI4703_REG_STATUSRSSI);
-    rssi_reg_val = (uint8_t)(reg_val& 0x0F);
+    rssi_reg_val = (uint8_t)(reg_val& 0xFF);
 
-    // レジスタ値 -> RSSI変換
-    rssi_dB = rssi_reg_val & SI4703_MAX_RSSI;
+    // RSSIを下位8bitから取り出す
+    rssi_reg_val = (uint8_t)(reg_val & 0x00FF);
+
+    // RSSIの最大値 75dBuVでマスク
+    rssi_dB = (int8_t)(rssi_reg_val & SI4703_MAX_RSSI);
 
     return rssi_dB;
 }

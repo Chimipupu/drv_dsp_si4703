@@ -184,10 +184,10 @@ static void _ui_draw_fm_freq(float freq_val, char *p_str)
     snprintf(buf, sizeof(buf), "ラジオ局: %s", p_str);
     g_lcd.print(buf);
 
-    // 2行目: FM周波数とRSSI
+    // 2行目: FM周波数[MHz]とRSSI[dBuV]
     g_lcd.setFont(u8g2_font_helvB12_tr);
     g_lcd.setCursor(0, 31);
-    snprintf(buf, sizeof(buf), "%.1fMHz %ddBm", freq_val, s_fm_rssi);
+    snprintf(buf, sizeof(buf), "%.1fMHz %ddBuV", freq_val, s_fm_rssi);
     g_lcd.print(buf);
 
     g_lcd.sendBuffer();
@@ -206,21 +206,23 @@ void dsp_radio_fm_ch_chg(void)
     _ui_draw_fm_freq(s_fm_freq, g_fm_station_freq_tbl[s_fm_freq_tbl_idx].p_str);
     Serial.printf("FM Freq: %.1f MHz (%s)\r\n", s_fm_freq, g_fm_station_freq_tbl[s_fm_freq_tbl_idx].p_str);
     s_fm_rssi = drv_si4703_get_fm_rssi();
-    Serial.printf("RSSI: %d dBm\r\n", s_fm_rssi);
+    Serial.printf("RSSI: %d dBuV\r\n", s_fm_rssi);
 
     s_fm_freq_tbl_idx = (s_fm_freq_tbl_idx + 1) % FM_STATION_FREQ_TBL_SIZE;
 }
 
 void dsp_radio_vol_ctrl(bool is_vol_up)
 {
+    s_vol_ctrl.volume_dB = drv_si4703_get_vol();
+
     if(is_vol_up) {
         s_vol_ctrl.volume_dB++;
     } else {
         s_vol_ctrl.volume_dB--;
     }
 
-    drv_si4703_set_vol(s_vol_ctrl.volume_dB);
-    Serial.printf("Volume: %d\r\n", s_vol_ctrl.volume_dB);
+    drv_si4703_set_vol(s_vol_ctrl.volume_dB & 0x0F);
+    Serial.printf("Volume: %d\r\n", s_vol_ctrl.volume_dB & 0x0F);
 }
 
 void dsp_radio_init(void)
