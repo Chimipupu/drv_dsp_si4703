@@ -66,7 +66,6 @@ const uint8_t FM_STATION_FREQ_TBL_SIZE = sizeof(g_fm_station_freq_tbl) / sizeof(
 
 static bool s_is_2_wire_enabled = false;
 static kt0913_config_t s_drv_cfg;
-// static kt0913_volume_ctrl_t s_vol_ctrl;
 
 static void _si4703_i2c_ctrl_enable(void);
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val);
@@ -219,8 +218,8 @@ bool drv_si4703_init(kt0913_config_t *p_config)
     drv_si4703_set_fm_freq(FM_STATION_FM_OSAKA);
 #endif
 
-    // 初期化時の音量を小さくしておく
-    drv_si4703_set_vol(0x05);
+    // [音量設定]
+    drv_si4703_set_vol(s_drv_cfg.vol_cfg.volume_dB);
 
     return true;
 }
@@ -234,6 +233,8 @@ void drv_si4703_set_vol(uint8_t vol_db)
     reg_val &= 0xFFF0; // Bit[3:0] VOLUMEビットをクリア
     reg_val |= (uint16_t)(vol_db & 0x0F);
     _set_reg(SI4703_REG_SYSCONFIG2, reg_val);
+
+    s_drv_cfg.vol_cfg.volume_dB = vol_db;
 }
 
 uint8_t drv_si4703_get_vol(void)
@@ -243,6 +244,8 @@ uint8_t drv_si4703_get_vol(void)
 
     reg_val = _get_reg(SI4703_REG_SYSCONFIG2);
     read_vol = (uint8_t)(reg_val & 0x000F);
+
+    s_drv_cfg.vol_cfg.volume_dB = read_vol;
 
     return read_vol;
 }

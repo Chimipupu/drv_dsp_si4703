@@ -1,7 +1,7 @@
 /**
  * @file dsp_radio.cpp
  * @author Chimipupu(https://github.com/Chimipupu)
- * @brief DSPラジオアプリ
+ * @brief DSPラジオアプリ (DSP = Si4703)
  * @version 0.1
  * @date 2026-05-16
  * @copyright Copyright (c) 2026 Chimipupu All Rights Reserved.
@@ -13,23 +13,37 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 
-// Si4703ドライバ
+// DSP (Si4703ドライバ)
 #include "drv_si4703.h"
 
 // -----------------------------------------------------------
-// 基板のGPIO
+/**
+ * @brief 結線 (Si4703 <-> マイコン)
+ *  ------------------------------
+ *   Si4703     <-> マイコン(RP2040)
+ *  ------------------------------
+ *   VCC        <-> 3.3V
+ *   GND        <-> GND
+ *   SDIO       <-> GPIO 4 (I2C SDA)
+ *   SCL        <-> GPIO 5 (I2C SCL)
+ *   #RST       <-> GPIO 22
+ *   #SEN       <-> (未接続)
+ *  ------------------------------
+ * @note Si4703の#SENピンは3.3Vでプルアップ
+ */
+
 #define I2C_SDA_PIN        4
 #define I2C_SCL_PIN        5
 #define DSP_RST_PIN        22
 #define PCB_BTN_PIN        24
 
+// -----------------------------------------------------------
 // OLEDディスプレイのI2Cアドレス
 #define I2C_ADDR_OLED      0x3C
 
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C g_lcd(U8G2_R0, U8X8_PIN_NONE);
 kt0913_config_t g_si4703_cfg;
 
-static kt0913_volume_ctrl_t s_vol_ctrl;
 static uint8_t s_fm_freq_tbl_idx = 0;
 static float s_fm_freq = 76.5f; // 初期周波数
 static int8_t s_fm_rssi = 0; // RSSI値
@@ -213,27 +227,32 @@ void dsp_radio_fm_ch_chg(void)
 
 void dsp_radio_vol_ctrl(bool is_vol_up)
 {
-    s_vol_ctrl.volume_dB = drv_si4703_get_vol();
+    g_si4703_cfg.vol_cfg.volume_dB = drv_si4703_get_vol();
 
     if(is_vol_up) {
-        s_vol_ctrl.volume_dB++;
+        g_si4703_cfg.vol_cfg.volume_dB++;
     } else {
-        s_vol_ctrl.volume_dB--;
+        g_si4703_cfg.vol_cfg.volume_dB--;
     }
 
-    drv_si4703_set_vol(s_vol_ctrl.volume_dB & 0x0F);
-    Serial.printf("Volume: %d\r\n", s_vol_ctrl.volume_dB & 0x0F);
+    drv_si4703_set_vol(g_si4703_cfg.vol_cfg.volume_dB & 0x0F);
+    Serial.printf("Volume: %d\r\n", g_si4703_cfg.vol_cfg.volume_dB & 0x0F);
 }
 
 void dsp_radio_init(void)
 {
+    // 音量設定
+    g_si4703_cfg.vol_cfg.is_stereo = true;
+    g_si4703_cfg.vol_cfg.is_vol_ext = false;
+    g_si4703_cfg.vol_cfg.volume_dB = 0x05;
+
     // Si4703ドライバにI2CのRead/Write関数を渡して初期化
-    g_si4703_cfg.p_i2c_burst_read = _i2c_read_burst;
+    g_si4703_cfg.p_i2c_burst_read  = _i2c_read_burst;
     g_si4703_cfg.p_i2c_burst_write = _i2c_write_burst;
-    g_si4703_cfg.p_rst_pin_ctrl = _rst_pin_ctrl;
-    g_si4703_cfg.p_sda_pin_ctrl = _sda_pin_ctrl;
-    g_si4703_cfg.p_i2c_init = _i2c_init;
-    g_si4703_cfg.p_delay_ms = delay;
+    g_si4703_cfg.p_rst_pin_ctrl    = _rst_pin_ctrl;
+    g_si4703_cfg.p_sda_pin_ctrl    = _sda_pin_ctrl;
+    g_si4703_cfg.p_i2c_init        = _i2c_init;
+    g_si4703_cfg.p_delay_ms        = delay;
     drv_si4703_init(&g_si4703_cfg);
 
     // GPIO初期化
