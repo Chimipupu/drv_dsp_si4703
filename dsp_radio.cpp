@@ -290,13 +290,16 @@ void dsp_radio_main(void)
 static void _dbg_get_all_reg(void)
 {
     uint8_t i;
+    uint16_t buf[16];
 
-    drv_si4703_all_reg_dump();
-    Serial.println("[DEBUG] DSP(SI4703) All Register Read Dump:");
+    memset(buf, 0, sizeof(buf));
+    drv_si4703_all_reg_dump(&buf[0]);
+
+    Serial.println("[DEBUG] DSP(SI4703) All Register Dump:");
 
     for(i = 0; i < 16; i++)
     {
-        Serial.printf("[DEBUG] Reg[0x%02X]: 0x%04X\r\n", i, g_si4703_reg_data_tbl[i].reg_val);
+        Serial.printf("[DEBUG] Register(0x%02X): 0x%04X\r\n", i, buf[i]);
     }
 }
 #endif // DEBUG_DSP_RADIO

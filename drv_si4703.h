@@ -116,9 +116,8 @@ typedef struct {
 // レジスタデータ
 typedef struct {
     uint8_t reg_addr;
-    uint16_t reg_val;
+    uint8_t buf_idx;
 } si4703_reg_data_t;
-extern si4703_reg_data_t g_si4703_reg_data_tbl[];
 
 // Si4703のRSTピンのON/OFF関数ポインタ
 typedef void (*rst_pin_ctrl_func_t)(uint8_t);
@@ -160,7 +159,7 @@ void drv_si4703_set_vol(uint8_t vol_db);
 uint8_t drv_si4703_get_vol(void);
 bool drv_si4703_set_fm_freq(uint8_t station);
 int8_t drv_si4703_get_fm_rssi(void);
-void drv_si4703_all_reg_dump(void);
+void drv_si4703_all_reg_dump(uint16_t *p_buf);
 
 #ifdef __cplusplus
 }

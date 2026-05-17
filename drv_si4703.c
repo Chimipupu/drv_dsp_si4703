@@ -12,32 +12,31 @@
 // -----------------------------------------------------------
 #define DRV_TIMEOUT_MS           100
 
-// [レジスタテーブル]
-si4703_reg_data_t g_si4703_reg_data_tbl[] = {
-    {SI4703_REG_DEVICEID,   0x0000},
-    {SI4703_REG_CHIPID,     0x0000},
-    {SI4703_REG_POWERCFG,   0x0000},
-    {SI4703_REG_CHANNEL,    0x0000},
-    {SI4703_REG_SYSCONFIG1, 0x0000},
-    {SI4703_REG_SYSCONFIG2, 0x0000},
-    {SI4703_REG_SYSCONFIG3, 0x0000},
-    {SI4703_REG_TEST1,      0x0000},
-    {SI4703_REG_TEST2,      0x0000},
-    {SI4703_REG_BOOTCONFIG, 0x0000},
-    {SI4703_REG_STATUSRSSI, 0x0000},
-    {SI4703_REG_READCHAN,   0x0000},
+static uint16_t s_write_reg_buf[8] = {0};
+static uint16_t s_read_reg_buf[16] = {0};
 
-    // [RDS/RBDSは未サポート]
-    // NOTE: 日本国内ではRDS/RBDSの受信はできないため
-#if 1
-    {SI4703_REG_RDSA,       0x0000},
-    {SI4703_REG_RDSB,       0x0000},
-    {SI4703_REG_RDSC,       0x0000},
-    {SI4703_REG_RDSD,       0x0000},
-#endif
+// [(ROM) レジスタテーブル]
+// バッファのデータはレジスタAddr:0x0A〜0x0F、0x00〜0x09の順なので対応
+static const si4703_reg_data_t g_si4703_reg_data_tbl[] = {
+    {SI4703_REG_DEVICEID,   0x06}, // Addr:0x00
+    {SI4703_REG_CHIPID,     0x07}, // Addr:0x01
+    {SI4703_REG_POWERCFG,   0x08}, // Addr:0x02
+    {SI4703_REG_CHANNEL,    0x09}, // Addr:0x03
+    {SI4703_REG_SYSCONFIG1, 0x0A}, // Addr:0x04
+    {SI4703_REG_SYSCONFIG2, 0x0B}, // Addr:0x05
+    {SI4703_REG_SYSCONFIG3, 0x0C}, // Addr:0x06
+    {SI4703_REG_TEST1,      0x0D}, // Addr:0x07
+    {SI4703_REG_TEST2,      0x0E}, // Addr:0x08
+    {SI4703_REG_BOOTCONFIG, 0x0F}, // Addr:0x09
+    {SI4703_REG_STATUSRSSI, 0x00}, // Addr:0x0A
+    {SI4703_REG_READCHAN,   0x01}, // Addr:0x0B
+    {SI4703_REG_RDSA,       0x02}, // Addr:0x0C
+    {SI4703_REG_RDSB,       0x03}, // Addr:0x0D
+    {SI4703_REG_RDSC,       0x04}, // Addr:0x0E
+    {SI4703_REG_RDSD,       0x05}, // Addr:0x0F
 };
 
-// [FMラジオ局テーブル]
+// (ROM) FMラジオ局テーブル]
 const fm_station_freq_t g_fm_station_freq_tbl[] = {
 #ifdef RADIO_AREA_TOKYO
     // [東京エリア]
@@ -68,7 +67,6 @@ const uint8_t FM_STATION_FREQ_TBL_SIZE = sizeof(g_fm_station_freq_tbl) / sizeof(
 static bool s_is_2_wire_enabled = false;
 static kt0913_config_t s_drv_cfg;
 // static kt0913_volume_ctrl_t s_vol_ctrl;
-static uint16_t s_write_reg_buf[8];
 
 static void _si4703_i2c_ctrl_enable(void);
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val);
@@ -101,29 +99,11 @@ static void _si4703_i2c_ctrl_enable(void)
 // NOTE: I2CでSi4703のレジスタをReadはAddr:0x0A〜0x0F、0x00〜0x09の順にバーストされる仕様
 static void _read_all_reg(void)
 {
-    uint16_t read_buf[16];
+    // 読む前にバッファを0クリア
+    memset(s_read_reg_buf, 0, sizeof(s_read_reg_buf));
 
-    memset(read_buf, 0, sizeof(read_buf));
-    s_drv_cfg.p_i2c_burst_read(&read_buf[0], 16 * 2);
-
-    // バッファのデータはレジスタAddr:0x0A〜0x0F、0x00〜0x09の順なので対応
-    g_si4703_reg_data_tbl[0x0A].reg_val = read_buf[0x00];  // Addr:0x0A
-    g_si4703_reg_data_tbl[0x0B].reg_val = read_buf[0x01];  // Addr:0x0B
-    g_si4703_reg_data_tbl[0x0C].reg_val = read_buf[0x02];  // Addr:0x0C
-    g_si4703_reg_data_tbl[0x0D].reg_val = read_buf[0x03];  // Addr:0x0D
-    g_si4703_reg_data_tbl[0x0E].reg_val = read_buf[0x04];  // Addr:0x0E
-    g_si4703_reg_data_tbl[0x0F].reg_val = read_buf[0x05];  // Addr:0x0F
-
-    g_si4703_reg_data_tbl[0x00].reg_val = read_buf[0x06];   // Addr:0x00
-    g_si4703_reg_data_tbl[0x01].reg_val = read_buf[0x07];   // Addr:0x01
-    g_si4703_reg_data_tbl[0x02].reg_val = read_buf[0x08];   // Addr:0x02
-    g_si4703_reg_data_tbl[0x03].reg_val = read_buf[0x09];   // Addr:0x03
-    g_si4703_reg_data_tbl[0x04].reg_val = read_buf[0x0A];   // Addr:0x04
-    g_si4703_reg_data_tbl[0x05].reg_val = read_buf[0x0B];   // Addr:0x05
-    g_si4703_reg_data_tbl[0x06].reg_val = read_buf[0x0C];   // Addr:0x06
-    g_si4703_reg_data_tbl[0x07].reg_val = read_buf[0x0D];   // Addr:0x07
-    g_si4703_reg_data_tbl[0x08].reg_val = read_buf[0x0E];   // Addr:0x08
-    g_si4703_reg_data_tbl[0x09].reg_val = read_buf[0x0F];   // Addr:0x09
+    // I2CでSi4703のレジスタをバーストRead
+    s_drv_cfg.p_i2c_burst_read(&s_read_reg_buf[0], 16 * 2);
 }
 
 static void _set_reg(uint8_t reg_addr, uint16_t reg_val)
@@ -141,10 +121,13 @@ static void _set_reg(uint8_t reg_addr, uint16_t reg_val)
     // 書き込めるレジスタ: Addr 0x02 ~ 0x09
     for(i = 0; i < 8; i++)
     {
-        s_write_reg_buf[i] = g_si4703_reg_data_tbl[2 + i].reg_val;
+        // Readバッファからレジスタの現在値をWriteバッファに書き込んでおく
+        s_write_reg_buf[i] = s_read_reg_buf[g_si4703_reg_data_tbl[2 + i].buf_idx];
     }
+    // 指定レジスタの値 @引数
     s_write_reg_buf[reg_addr - 2] = reg_val;
 
+    // I2CでSi4703のレジスタをバーストWrite
     s_drv_cfg.p_i2c_burst_write(s_write_reg_buf, 8 * 2);
 }
 
@@ -155,7 +138,7 @@ static uint16_t _get_reg(uint8_t reg_addr)
     _read_all_reg();
 
     if(reg_addr <= 0x0F) {
-        reg_val = g_si4703_reg_data_tbl[reg_addr].reg_val;
+        reg_val = s_read_reg_buf[g_si4703_reg_data_tbl[reg_addr].buf_idx];
     }
 
     return reg_val;
@@ -237,7 +220,7 @@ bool drv_si4703_init(kt0913_config_t *p_config)
 #endif
 
     // 初期化時の音量を小さくしておく
-    drv_si4703_set_vol(0x08);
+    drv_si4703_set_vol(0x05);
 
     return true;
 }
@@ -335,7 +318,21 @@ int8_t drv_si4703_get_fm_rssi(void)
     return rssi_dB;
 }
 
-void drv_si4703_all_reg_dump(void)
+void drv_si4703_all_reg_dump(uint16_t *p_buf)
 {
+    uint8_t i;
+    uint16_t *p_ptr;
+
+    if(p_buf == NULL) {
+        return;
+    }
+
+    p_ptr = p_buf;
     _read_all_reg();
+
+    for(i = 0; i < 16; i++)
+    {
+        *p_ptr = s_read_reg_buf[g_si4703_reg_data_tbl[i].buf_idx];
+        p_ptr++;
+    }
 }
